@@ -1,33 +1,9 @@
 import shared.AbstractModule;
-import java.awt.BorderLayout;
-import java.awt.Dimension;
-import java.awt.Toolkit;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
 import java.util.ArrayList;
-import javax.swing.BorderFactory;
-import javax.swing.JButton;
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JTabbedPane;
-import javax.swing.JTextArea;
-import javax.swing.JTextField;
-import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
 
 public class Main extends AbstractModule {
 
@@ -35,7 +11,7 @@ public class Main extends AbstractModule {
     private boolean setEmptyDelete;
     private String dataLoaded = "";
     private String keyStringMaker = "";
-    
+
     // GUI components
     private JFrame frame;
     private JPanel editorPanel;
@@ -46,26 +22,40 @@ public class Main extends AbstractModule {
     private JButton encryptButton;
     private JTextField location;
     private JTextField textInput;
-    
+
     // Variables for encryption key table
     private ArrayList<ArrayList<String[]>> section = new ArrayList<>();
     private ArrayList<String[]> row = new ArrayList<>();
     private String[] keyPoint;
-    
+
+    // Constructor left empty (or you can remove it)
+    public Main() {
+        // Avoid asynchronous initialization here.
+    }
+
     // -------------------------------
     // Module Lifecycle Methods
     // -------------------------------
     
     @Override
     public void start() {
-        // Ensure GUI creation on the EDT.
-        SwingUtilities.invokeLater(() -> {
-            if (frame == null) {
+        // Ensure that the frame is initialized before showing it.
+        if (frame == null) {
+            if (SwingUtilities.isEventDispatchThread()) {
                 initialize();
                 setDefault();
+            } else {
+                try {
+                    SwingUtilities.invokeAndWait(() -> {
+                        initialize();
+                        setDefault();
+                    });
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
-            frame.setVisible(true);
-        });
+        }
+        frame.setVisible(true);
     }
 
     @Override
@@ -91,44 +81,38 @@ public class Main extends AbstractModule {
     }
 
     @Override
-    public void close() {
-        if (frame != null) {
-            frame.dispose();
-            notifyClose();
-        }
-    }
-
-    @Override
     public boolean isVisible() {
         return frame != null && frame.isVisible();
     }
-    
+
+    // Use onClose() to perform cleanup when closing.
+    @Override
+    protected void onClose() {
+        if (frame != null) {
+            frame.dispose();
+            frame = null;
+        }
+    }
+
     // -------------------------------
     // GUI Initialization
     // -------------------------------
     
     private void initialize() {
         frame = new JFrame("CCCrypter V.1.1.4.7");
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.setSize(555, 400);
+        frame.setLayout(new BorderLayout());
         frame.setAlwaysOnTop(true);
-        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        frame.setBounds(100, 100, 555, 400);
-        frame.getContentPane().setLayout(new BorderLayout());
-        
-        
-        // Adjust layout on resize.
-        frame.addComponentListener(new ComponentAdapter() {
+        frame.addWindowListener(new WindowAdapter() {
             @Override
-            public void componentResized(ComponentEvent e) {
-                if (scrollPane != null && encryptButton != null && decryptButton != null) {
-                    scrollPane.setSize(frame.getWidth() - 35, frame.getHeight() - 225);
-                    encryptButton.setLocation(10, frame.getHeight() - 162);
-                    decryptButton.setLocation(109, frame.getHeight() - 162);
-                }
+            public void windowClosing(WindowEvent e) {
+                onClose();
             }
         });
         
         // Create a tabbed pane with two tabs: Main Panel and Editor.
-        JTabbedPane tabbedPane = new JTabbedPane(SwingConstants.TOP);
+        JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
         tabbedPane.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         frame.getContentPane().add(tabbedPane, BorderLayout.CENTER);
         
@@ -205,92 +189,91 @@ public class Main extends AbstractModule {
         editorPanel.add(loadDefault);
         
         // --------------------------
+        // Component Listener for Resizing
+        // --------------------------
+        frame.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                if (scrollPane != null && encryptButton != null && decryptButton != null) {
+                    scrollPane.setSize(frame.getWidth() - 35, frame.getHeight() - 225);
+                    encryptButton.setLocation(10, frame.getHeight() - 162);
+                    decryptButton.setLocation(109, frame.getHeight() - 162);
+                }
+            }
+        });
+        
+        // --------------------------
         // Action Listeners
         // --------------------------
         
         // Encrypt action
-        encryptButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String encrypted = encrypt(textArea.getText());
-                encrypted = "Encrypted :\n" + encrypted;
-                textArea.setText(encrypted);
-            }
+        encryptButton.addActionListener(e -> {
+            String encrypted = encrypt(textArea.getText());
+            encrypted = "Encrypted :\n" + encrypted;
+            textArea.setText(encrypted);
         });
         
         // Decrypt action
-        decryptButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                textArea.setText("Decrypted :\n" + decrypt(textArea.getText()));
-            }
+        decryptButton.addActionListener(e -> {
+            textArea.setText("Decrypted :\n" + decrypt(textArea.getText()));
         });
         
         // Key Loader action: load key from file
-        keyLoader.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                String dataLocation = getLocation();
-                location.setText(dataLocation);
-                dataLoaded = loadAllText(dataLocation);
-                editor.setText(dataLoaded);
-                keyLoad(dataLoaded);
-            }
-            
-            private void keyLoad(String data) {
-                section = new ArrayList<>();
-                row = new ArrayList<>();
-                String[] allLine = data.split("\n");
-                for (String element : allLine) {
-                    if (element.contains("newSection")) {
-                        addCurrentRowToSection();
-                    } else {
-                        addKeyPoint(element.split(","));
-                    }
-                }
-                addCurrentRowToSection();
-            }
+        keyLoader.addActionListener(e -> {
+            String dataLocation = getLocation();
+            location.setText(dataLocation);
+            dataLoaded = loadAllText(dataLocation);
+            editor.setText(dataLoaded);
+            keyLoad(dataLoaded);
         });
         
         // Enter letter to add to the key string
-        enterButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (!keyStringMaker.equals("")) {
-                    keyStringMaker += ",";
-                }
-                keyStringMaker += textInput.getText();
-                editor.setText(keyStringMaker);
+        enterButton.addActionListener(e -> {
+            if (!keyStringMaker.isEmpty()) {
+                keyStringMaker += ",";
             }
+            keyStringMaker += textInput.getText();
+            editor.setText(keyStringMaker);
         });
         
         // Create key file action
-        createKeyButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                try {
-                    if (dataLoaded.equals("")) {
-                        setDefault();
-                        createTxtFile(dataLoaded);
-                    } else {
-                        dataLoaded = editor.getText();
-                        createTxtFile(dataLoaded);
-                    }
-                } catch (Exception ex) {
-                    editor.setText("The file failed to create:\n" + ex);
+        createKeyButton.addActionListener(e -> {
+            try {
+                if (dataLoaded.isEmpty()) {
+                    setDefault();
+                    createTxtFile(dataLoaded);
+                } else {
+                    dataLoaded = editor.getText();
+                    createTxtFile(dataLoaded);
                 }
+            } catch (Exception ex) {
+                editor.setText("The file failed to create:\n" + ex);
             }
         });
         
-        // Load default key
-        loadDefault.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                setDefault();
-                dataLoaded = "";
-                showTable();
-            }
+        // Load default key action
+        loadDefault.addActionListener(e -> {
+            setDefault();
+            dataLoaded = "";
+            showTable();
         });
+    }
+    
+    // -------------------------------
+    // Helper method for loading key data from a string
+    // -------------------------------
+    private void keyLoad(String data) {
+        section = new ArrayList<>();
+        row = new ArrayList<>();
+        String[] allLine = data.split("\n");
+        for (String element : allLine) {
+            if (element.contains("newSection")) {
+                addCurrentRowToSection();
+            } else {
+                addKeyPoint(element.split(","));
+            }
+        }
+        addCurrentRowToSection();
     }
     
     // -------------------------------
@@ -529,5 +512,12 @@ public class Main extends AbstractModule {
         return totalLetter.toString();
     }
     
-    // (Optional) Additional helper methods can be added here.
+    // -------------------------------
+    // Main method (for testing or standalone use)
+    // -------------------------------
+    
+    public static void main(String[] args) {
+        Main module = new Main();
+        module.start();
+    }
 }
